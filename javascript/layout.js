@@ -93,44 +93,66 @@ const jsFiles = {
 };
 
 function layout(page) {
-    fetch("layout.html")
-        .then((response) => response.text())
-        .then((html) => {
-            document.body.innerHTML = html;
-            return fetch(page);
-        })
-        .then((response) => response.text())
-        .then((pageHtml) => {
-            checklogin();
-            getUserData();
+    Promise.all([
+        fetch("layout.html").then(response => response.text()),
+        fetch(page).then(response => response.text())
+    ])
+    .then(([layoutHtml, pageHtml]) => {
+        document.body.innerHTML = layoutHtml;
+        const currentLinks = document.querySelectorAll('link[rel="stylesheet"]');
+        currentLinks.forEach(link => {
+            if (link.href && !link.href.includes("layout")) {
+                link.remove();
+            }
+        });
+
+        checklogin();
+        getUserData();
+        const cssFileList = cssFiles[page] || [];
+        let loadedCssCount = 0;
+
+        function proceedToRender() {
             const main = document.querySelector("main");
-            main.innerHTML = pageHtml;
             const title = titles[page];
-            const cssFile = cssFiles[page];
-            const jsFile = jsFiles[page];
+            const jsFileList = jsFiles[page];
+            
             if (title) {
                 document.title = title;
             }
-            if (cssFile) {
-                cssFile.forEach((cssfile) => {
-                    const link = document.createElement("link");
-                    link.rel = "stylesheet";
-                    link.href = cssfile;
-                    document.head.appendChild(link);
-                });
+            if (main) {
+                main.innerHTML = pageHtml;
             }
-            if (jsFile) {
-                jsFile.forEach((jsfile) => {
+            if (jsFileList) {
+                jsFileList.forEach((jsfile) => {
                     const script = document.createElement("script");
-                    script.src = jsfile;
+                    script.src = `${jsfile}?v=${new Date().getTime()}`;
                     script.async = true;
                     document.body.appendChild(script);
                 });
             }
-        })
-        .catch((error) => {
-            console.error("加載指定頁面失敗：", error);
-        });
+        }
+        
+        if (cssFileList.length > 0) {
+            cssFileList.forEach((cssfile) => {
+                const link = document.createElement("link");
+                link.rel = "stylesheet";
+                link.href = cssfile;
+                link.onload = () => {
+                    loadedCssCount++;
+                    if (loadedCssCount === cssFileList.length) {
+                        proceedToRender();
+                    }
+                }
+                document.head.appendChild(link);
+            });
+        }
+        else {
+            proceedToRender();
+        }
+    })
+    .catch((error) => {
+        console.error("加載指定頁面失敗：", error);
+    });
 }
 
 function router() {
